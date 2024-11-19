@@ -1,83 +1,91 @@
 import os
 import argparse
 import numpy as np
+import matplotlib.pyplot as plt
 import torch
-import torch.nn as nn
+from torch.utils.data import DataLoader
 from model import Net
-from torchvision.datasets.folder import default_loader
-import cv2
-import albumentations as A
-from albumentations.pytorch.transforms import ToTensorV2
+from dataset import CustomDataset
+
+def plot_sample(input_image, gt_image, pred_image, output_path):
+    """
+    Combines input, ground truth, prediction, input+ground truth, and input+prediction into one visualization.
+    """
+    # Permute input image to (H, W, C) for visualization if it's RGB
+    if input_image.ndim == 3 and input_image.shape[0] == 3:
+        input_image = input_image.transpose(1, 2, 0)  # Convert (C, H, W) to (H, W, C)
+
+    fig, axes = plt.subplots(1, 5, figsize=(25, 5))
+
+    axes[0].imshow(input_image, cmap='gray' if input_image.ndim == 2 else None)
+    axes[0].set_title("Input")
+    axes[0].axis('off')
+
+    axes[1].imshow(gt_image, cmap='gray')
+    axes[1].set_title("Ground Truth")
+    axes[1].axis('off')
+
+    axes[2].imshow(pred_image, cmap='gray')
+    axes[2].set_title("Prediction")
+    axes[2].axis('off')
+
+    axes[3].imshow(input_image, cmap='gray' if input_image.ndim == 2 else None)
+    axes[3].imshow(gt_image, cmap='gray', alpha=0.5)
+    axes[3].set_title("Input + GT")
+    axes[3].axis('off')
+
+    axes[4].imshow(input_image, cmap='gray' if input_image.ndim == 2 else None)
+    axes[4].imshow(pred_image, cmap='gray', alpha=0.5)
+    axes[4].set_title("Input + Prediction")
+    axes[4].axis('off')
+
+    plt.tight_layout()
+    plt.savefig(output_path)
+    plt.close()
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Malignant Segmentation')
-    parser.add_argument('--data_path', type=str, default='/home/pwrai/userarea/hansung3/KTL_project_05_Breastultrasound_Segmentation/data/test/images/malignant (124).png', help="data path")
-    parser.add_argument('--n_classes', type=int, default=1, help="number of classes (set to 1 if model was trained for binary segmentation)")
-    parser.add_argument('--cuda', action='store_true', help='use cuda?')
-    parser.add_argument('--seed', type=int, default=42, help='random seed to use. Default=123')
-    parser.add_argument('--model_save_path', type=str, default='./checkpoints', help='path to load the model')
+    parser = argparse.ArgumentParser(description='Visualization of Segmentation')
+    parser.add_argument('--data_direc', type=str, default='./data/test', help="Path to test dataset")
+    parser.add_argument('--n_classes', type=int, default=1, help="Number of classes")
+    parser.add_argument('--cuda', action='store_true', help='Use CUDA')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed to use. Default=123')
+    parser.add_argument('--model_save_path', type=str, default='./checkpoints', help='Path to save/load the model')
+    parser.add_argument('--output_dir', type=str, default='./test_results', help='Directory to save visualization results')
     opt = parser.parse_args()
 
     if not os.path.isdir(opt.model_save_path):
         raise Exception("Checkpoints not found, please run train.py first")
 
-    os.makedirs("Visualize_result", exist_ok=True)
-
-    if opt.cuda and not torch.cuda.is_available():
-        raise Exception("No GPU found, please run without --cuda")
+    os.makedirs(opt.output_dir, exist_ok=True)
 
     torch.manual_seed(opt.seed)
-    device = 'cuda'
+    device = torch.device("cuda" if opt.cuda and torch.cuda.is_available() else "cpu")
 
-    # Load model and set to eval mode
-    model = Net(n_classes=opt.n_classes).to(device)
-    model.load_state_dict(torch.load(os.path.join(opt.model_save_path, 'model_statedict.pth'), map_location=device), strict=False)
-    model.eval()
-
-    if not os.path.isdir(opt.model_save_path):
-        raise Exception("checkpoints not found, please run train.py first")
-
-    os.makedirs("Visualize_result", exist_ok=True)
-    
-    if opt.cuda and not torch.cuda.is_available():
-        raise Exception("No GPU found, please run without --cuda")
-    
-    torch.manual_seed(opt.seed)
-    
-    if opt.cuda:
-        device = torch.device("cuda:1")
-    else:
-        device = torch.device("cpu")
-    
+    # Load model
     model = Net(n_classes=opt.n_classes).to(device)
     model.load_state_dict(torch.load(os.path.join(opt.model_save_path, 'model_statedict.pth'), map_location=device))
     model.eval()
 
-    transform = A.Compose([
-        A.Resize(width=128, height=128),
-        A.Normalize(mean=0.5, std=0.5, max_pixel_value=1.0, always_apply=True, p=1.0),
-        ToTensorV2(transpose_mask=True)
-    ])
+    # Load dataset
+    test_dataset = CustomDataset(direc=opt.data_direc, mode='eval')
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
-    image = (np.array(default_loader(opt.data_path)) / 255.).astype(np.float32)
-    sample_origin_shape = image.shape
-    transformed = transform(image=image)
-    sample_input = transformed['image']
+    print(f"[INFO] Total test samples: {len(test_dataset)}")
 
-    with torch.no_grad():
-        pred_logit = model(sample_input[None].to(device))
-        pred = (pred_logit > 0.5).float().squeeze().detach().cpu()
+    # Process 5 samples
+    for idx, data in enumerate(test_loader):
+        if idx >= 5:
+            break
 
-    origin_size_pred = torch.nn.functional.interpolate(pred[None, None].float(), size=sample_origin_shape[:2], mode='nearest').squeeze().numpy()
+        input_image = data['input'].squeeze().numpy()
+        gt_image = data['target'].squeeze().numpy()
 
-    cbct = sample_input.clone()
-    cbct_visualize = cbct.permute(1, 2, 0).squeeze().detach().cpu().clone()
-    cbct_visualize = ((cbct_visualize * 0.5 + 0.5) * 255).numpy().astype(np.uint8)
-    cbct_visualize_contour = cbct_visualize.copy()
-    contours, hier = cv2.findContours((pred.numpy().astype(np.uint8) * 255), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    if contours:
-        largest_contour = max(contours, key=cv2.contourArea)
-        cv2.drawContours(cbct_visualize_contour, [largest_contour], -1, (0, 0, 255), 2, cv2.LINE_8)
+        # Prediction
+        with torch.no_grad():
+            pred_logit = model(data['input'].to(device).float())
+            pred_image = (pred_logit > 0.5).float().squeeze().cpu().numpy()
 
-    cv2.imwrite(f"Visualize_result/{opt.data_path.split('/')[-1]}", cbct_visualize[..., ::-1])
-    cv2.imwrite(f"Visualize_result/{opt.data_path.split('/')[-1].split('.')[0]}_visualize.{opt.data_path.split('/')[-1].split('.')[-1]}", cbct_visualize_contour[..., ::-1])
+        # Save visualization
+        output_path = os.path.join(opt.output_dir, f'sample_{idx + 1}.png')
+        plot_sample(input_image, gt_image, pred_image, output_path)
+        print(f"[INFO] Saved visualization for sample {idx + 1} at {output_path}")
