@@ -1,4 +1,4 @@
-# KTL_project_05_Breastultrasound_Segmentation
+# KTL_project_05_Ultrasound_BreastCancer_Segmentation
 
 This repository contains a PyTorch implementation of a polyp segmentation deep learning model. The steps for training and testing the model are outlined below.
 
@@ -50,8 +50,8 @@ Before you begin, ensure you have met the following requirements:
 
 - Clone this repo:
 ```bash
-git clone https://github.com/ktlProject0/KTL_project_05_Breastultrasound_Segmentation.git
-cd KTL_project_05_Breastultrasound_Segmentation
+git clone https://github.com/ktlProject0/KTL_project_05_Ultrasound_BreastCancer_Segmentation.git
+cd KTL_project_05_Ultrasound_BreastCancer_Segmentation
 ```
  - You can create a new Conda environment using `conda env create -f environment.yml`.
 
