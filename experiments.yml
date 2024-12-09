@@ -1,4 +1,4 @@
-name: 05_breastultrasound_segmenatation
+name: KTL_project_05_Ultrasound_BreastCancer_Segmentation
 channels:
   - pytorch
   - nvidia
@@ -214,4 +214,4 @@ dependencies:
   - pip:
       - albumentations==1.0.0
       - simpleitk==2.4.0
-prefix: /home/pwrai/.conda/envs/05_breastultrasound_segmenatation
+prefix: /home/pwrai/.conda/envs/KTL_project_05_Ultrasound_BreastCancer_Segmentation
